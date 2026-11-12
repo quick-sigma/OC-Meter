@@ -135,3 +135,22 @@ def make_bundle(
         "events": list(events),
         "exports": list(exports)
     }
+
+def make_mapping(
+    *,
+    included: bool = False,
+    fields: dict[str, str] | None = None, 
+    version: str = 'test'
+) -> dict[str, Any]:
+    """Build a provisional mapping."""
+    return {
+        "version": version,
+        "fields": fields or {
+            "input": "tokens.input",
+            "output": "tokens.output",
+            "reasoning": "tokens.reasoning",
+            "cache_read": "tokens.cache.read",
+            "cache_write": "tokens.cache.write",
+        },
+        "reasoning_included_in_output": included,
+    }
