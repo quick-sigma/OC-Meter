@@ -1,118 +1,65 @@
 # oc-meter
 
-Instrumento de medición para sesiones de OpenCode. Mide recursos y tiempo, y emite
-un registro JSON canónico. No ejecuta prompts, no modifica proyectos, no juzga si el
-trabajo es correcto, no calcula dinero. El conductor del experimento es otro paquete.
+Measurement instrument for OpenCode sessions. It measures resources and time, and
+emits a canonical JSON record. It does not run prompts, does not modify projects,
+does not judge whether the work is correct, and does not compute money. The
+experiment driver is a separate package.
 
-## Qué mide
+## What it measures
 
-Unidad interna: tokens enteros. La presentación en K es responsabilidad de `report`.
+Internal unit: integer tokens. Rendering in thousands (K) is the responsibility of `report`.
 
-| Cantidad | Definición operacional | Frontera |
+| Quantity | Operational definition | Boundary |
 |---|---|---|
-| inputTokens | entrada NO cacheada (`tokens.input`) | mensajes assistant del árbol completo |
-| outputTokens | generación visible (`tokens.output`) | idem; excluye reasoning si el proveedor lo reporta aparte |
-| reasoningTokens | fase de razonamiento (`tokens.reasoning`) | idem; guarda de doble conteo |
-| cacheReadTokens | tokens servidos desde caché por coincidencia de prefijo | idem |
-| cacheWriteTokens | tokens escritos a caché | idem; 0 o ausente según proveedor → flag |
-| wallMs | t0 → t1 con debounce | árbol completo, reloj monotónico del observador |
-| overlapFactor | busySumMs / wallMs | >1 indica trabajo concurrente |
+| inputTokens | uncached input (`tokens.input`) | assistant messages across the whole tree |
+| outputTokens | visible generation (`tokens.output`) | same; excludes reasoning when the provider reports it separately |
+| reasoningTokens | reasoning phase (`tokens.reasoning`) | same; double-counting guard |
+| cacheReadTokens | tokens served from cache via prefix matching | same |
+| cacheWriteTokens | tokens written to cache | same; zero or absent depending on provider → flag |
+| wallMs | t0 → t1 with debounce | whole tree, observer's monotonic clock |
+| overlapFactor | busySumMs / wallMs | >1 indicates concurrent work |
 
-Derivadas: promptTokens = input + cacheRead · generation = output + reasoning ·
+Derived: promptTokens = input + cacheRead · generation = output + reasoning ·
 cacheHitRatio = cacheRead / (cacheRead + input).
 
-Bucket separado `maintenance` para title/summary/compaction. Se reporta work,
-maintenance y all. No se descarta nada en silencio.
+Separate `maintenance` bucket for title/summary/compaction. work, maintenance, and
+all are reported. Nothing is silently discarded.
 
-## Unidad de medición
+## Unit of measurement
 
-Corrida = sesión raíz + todas las descendientes.
-t0 = envío del primer prompt. t1 = quietud de todo el árbol sostenida δ ms.
-δ declarado (default 5000). Se guardan t1Raw y t1Debounced.
+Run = root session + all of its descendants.
+t0 = submission of the first prompt. t1 = quiescence of the whole tree sustained for δ ms.
+δ is declared (default 5000). Both t1Raw and t1Debounced are stored.
 
-## Requisitos
+## Requirements
 
-- Versión de OpenCode pineada (schema de export y flags derivan entre versiones).
-- Contenedor desechable, sin credenciales. `--auto` convierte los `ask` por defecto
-  (incluida lectura de `.env`) en permitidos: no debe haber secretos en el entorno.
-- La caché del proveedor NO se desactiva; se observa. Alternar el orden de los
-  brazos entre réplicas para no acumular el efecto a favor del mismo.
+- Pinned OpenCode version (export schema and flags drift between versions).
+- Disposable container, no credentials. `--auto` turns default `ask` rules
+  (including `.env` reads) into allowed ones: there must be no secrets in the environment.
+- The provider cache is NOT disabled; it is observed. Alternate arm order across
+  replicates so the effect does not accumulate in favor of the same arm.
 
-## Uso
+## Usage
 
-oc-meter doctor                      # certificado de limpieza del entorno
-oc-meter zero [--live]               # medición cero (offline por defecto)
+oc-meter doctor                      # environment cleanliness certificate
+oc-meter zero [--live]               # zero measurement (offline by default)
 oc-meter measure --root <ses_id> --out record.json
 oc-meter report record.json --format markdown|txt
 oc-meter compare records/ --group-by arm
 
-`report` renderiza registros existentes; nunca vuelve a medir.
-`compare` rechaza registros con distinto modelo/variante, versión de instrumento,
-mappingHash o workId.
+`report` renders existing records; it never re-measures.
+`compare` rejects records with differing model/variant, instrument version,
+mappingHash, or workId.
 
-## Calibración
+## Calibration
 
-Ocho checks (cero, mapeo congelado, doble conteo, atribución del árbol,
-conservación vs stats, reloj, determinismo, sonda conocida).
-`uv run pytest` — los siete primeros sobre fixtures, sin cuota.
+Eight checks (zero, frozen mapping, double counting, tree attribution,
+conservation vs stats, clock, determinism, known probe).
+`uv run pytest` — the first seven run against fixtures, with no quota consumption.
 
-## Limitaciones conocidas
+## Known limitations
 
-- Caché del proveedor: no desactivable; efecto de orden entre brazos.
-- Tokenizador: los tokens no son comparables entre modelos; modelo pineado por lote.
-- Paralelismo de subagentes: una ganancia de tiempo puede venir de concurrencia,
-  no de eficiencia; interpretar siempre junto a overlapFactor.
-- Agentes de mantenimiento: consumen tokens; bucket separado, nunca ocultos.
-- Drift del schema de export: versión pineada + mappingHash; revalidar al actualizar.
-- Ruido temporal: carga del proveedor y red afectan wallMs; requiere más réplicas
-  que las métricas de tokens.
-- Variante de razonamiento: si solo es configurable y no observable, se marca flag.
-
-## Formato de salida
-
-El formato de salida es un JSON estructurado.
-
-```json
-{
-  "instrument": { "name": "oc-meter", "version": "0.1.0", "mappingHash": "sha256:…" },
-  "run": { "id": "r-0007", "labels": { "arm": "layered" }, "workId": "sha256:…" },
-  "conditions": {
-    "opencodeVersion": "2.x.y",
-    "model": "deepseek/deepseek-v4-flash",
-    "reasoningEffort": "low",
-    "reasoningEffortSource": "observed",
-    "modelHomogeneous": true,
-    "cleanlinessCertificateHash": "sha256:…"
-  },
-  "tree": { "root": "ses_…", "sessions": 9, "maxDepth": 1, "requests": 74 },
-  "time": {
-    "t0": "…", "t1Raw": "…", "t1Debounced": "…", "debounceMs": 5000,
-    "wallMs": 412000, "busySumMs": 690000, "overlapFactor": 1.67,
-    "clockSource": "observer-monotonic"
-  },
-  "requests": [
-    {
-      "sessionId": "ses_…", "agent": "backend", "segmentId": "003", "class": "work",
-      "model": "deepseek/deepseek-v4-flash", "reasoningEffort": "low",
-      "inputTokens": 1820, "outputTokens": 640, "reasoningTokens": 310,
-      "cacheReadTokens": 14200, "cacheWriteTokens": 0
-    }
-  ],
-  "segments": [
-    { "id": "003", "wallMs": 91000, "inputTokens": 0, "outputTokens": 0,
-      "reasoningTokens": 0, "cacheReadTokens": 0, "cacheWriteTokens": 0 }
-  ],
-  "totals": {
-    "work":        { "inputTokens": 0, "outputTokens": 0, "reasoningTokens": 0, "cacheReadTokens": 0, "cacheWriteTokens": 0 },
-    "maintenance": { "inputTokens": 0, "outputTokens": 0, "reasoningTokens": 0, "cacheReadTokens": 0, "cacheWriteTokens": 0 },
-    "all":         { "inputTokens": 0, "outputTokens": 0, "reasoningTokens": 0, "cacheReadTokens": 0, "cacheWriteTokens": 0 }
-  },
-  "derived": { "promptTokens": 0, "generationTokens": 0, "cacheHitRatio": 0.0 },
-  "flags": []
-}
-```
-
-## Versionado
-
-Semántico. Cambiar una definición operacional = major. Todo registro lleva
-versión del instrumento y mappingHash; el comparador rechaza mezclas.
+- Provider cache: cannot be disabled; order effects between arms.
+- Tokenizer: tokens are not comparable across models; model pinned per batch.
+- Subagent parallelism: a time gain may come from concurrency rather than
+  efficiency; always interpret alongside overlapFactor.
