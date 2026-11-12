@@ -40,14 +40,16 @@ t0 = submission of the first prompt. t1 = quiescence of the whole tree sustained
   replicates so the effect does not accumulate in favor of the same arm.
 
 ## Usage
-
+```sh
 oc-meter doctor                      # environment cleanliness certificate
 oc-meter zero [--live]               # zero measurement (offline by default)
 oc-meter measure --root <ses_id> --out record.json
 oc-meter report record.json --format markdown|txt
 oc-meter compare records/ --group-by arm
+```
 
 `report` renders existing records; it never re-measures.
+
 `compare` rejects records with differing model/variant, instrument version,
 mappingHash, or workId.
 
