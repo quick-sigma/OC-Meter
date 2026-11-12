@@ -43,16 +43,16 @@ def message(
 
     if include_tokens:
         tokens: dict[str, Any] = {
-            'input': inputTokens,
-            'output': output, 
+            "input": inputTokens,
+            "output": output, 
             "cache": {"read": cache_read, "write": cache_write},
         }
 
         if include_reasoning:
-            tokens['reasoning'] = reasoning
+            tokens["reasoning"] = reasoning
         info["tokens"] = tokens
 
-    return {'info': info, "parts": []}
+    return {"info": info, "parts": []}
 
 def export(
         session_id: str, 
@@ -61,7 +61,7 @@ def export(
 ):
     """Build a raw session export."""
     return {
-        'session': {'id': session_id, 'parentID': parent_id}
+        "session": {"id": session_id, "parentID": parent_id}
     }
 
 def activity(
@@ -140,7 +140,7 @@ def make_mapping(
     *,
     included: bool = False,
     fields: dict[str, str] | None = None, 
-    version: str = 'test'
+    version: str = "test"
 ) -> dict[str, Any]:
     """Build a provisional mapping."""
     return {
